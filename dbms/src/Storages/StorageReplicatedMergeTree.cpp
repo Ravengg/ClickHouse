@@ -1156,32 +1156,10 @@ bool StorageReplicatedMergeTree::executeLogEntry(const LogEntry & entry)
 			size_t aio_threshold = context.getSettings().min_bytes_to_use_direct_io;
 
 			/// Logging
-			PartLogElement elem;
 			Stopwatch stopwatch;
-			elem.event_time = time(0);
-
-			elem.merged_from.reserve(parts.size());
-			for (const auto & part : parts)
-				elem.merged_from.push_back(part->name);
-
+			
 			auto part = merger.mergePartsToTemporaryPart(
 				parts, entry.new_part_name, *merge_entry, aio_threshold, entry.create_time, reserved_space.get());
-
-			std::shared_ptr<PartLog> part_log = context.getPartLog();
-			if (part_log)
-			{
-				elem.event_type = PartLogElement::MERGE_PARTS;
-				elem.size_in_bytes = part->size_in_bytes;
-
-				elem.database_name = part->storage.getDatabaseName();
-				elem.table_name = part->storage.getTableName();
-				elem.part_name = part->name;
-
-				elem.duration_ms = stopwatch.elapsed() / 1000000;
-
-				part_log->add(elem);
-			}
-			part_log.reset();
 
 			zkutil::Ops ops;
 
@@ -1230,6 +1208,39 @@ bool StorageReplicatedMergeTree::executeLogEntry(const LogEntry & entry)
 				merge_selecting_event.set();
 
 				ProfileEvents::increment(ProfileEvents::ReplicatedPartMerges);
+
+				std::shared_ptr<PartLog> part_log = context.getPartLog();
+				if (part_log)
+				{
+					PartLogElement elem;
+
+					elem.merged_from.reserve(parts.size());
+					for (const auto & part : parts)
+						elem.merged_from.push_back(part->name);
+
+					elem.event_time = time(0);
+					elem.event_type = PartLogElement::MERGE_PARTS;
+					elem.size_in_bytes = part->size_in_bytes;
+
+					elem.database_name = part->storage.getDatabaseName();
+					elem.table_name = part->storage.getTableName();
+					elem.part_name = part->name;
+
+					elem.duration_ms = stopwatch.elapsed() / 1000000;
+
+					part_log->add(elem);
+
+					elem.duration_ms = 0;
+					elem.event_type = PartLogElement::REMOVE_PART;
+					elem.merged_from = Strings();
+					for (const auto & part : parts)
+					{
+						elem.part_name = part->name;
+						elem.size_in_bytes = part->size_in_bytes;
+						part_log->add(elem);
+					}
+				}
+				part_log.reset();
 			}
 		}
 	}
@@ -2065,26 +2076,11 @@ bool StorageReplicatedMergeTree::fetchPart(const String & part_name, const Strin
 	ReplicatedMergeTreeAddress address(getZooKeeper()->get(replica_path + "/host"));
 
 	Stopwatch stopwatch;
-	PartLogElement elem;
-	elem.event_time = time(0);
-
+	
 	MergeTreeData::MutableDataPartPtr part = fetcher.fetchPart(
 		part_name, replica_path, address.host, address.replication_port, to_detached);
 
-	std::shared_ptr<PartLog> part_log = context.getPartLog();
-	if (part_log)
-	{
-		elem.event_type = PartLogElement::DOWNLOAD_PART;
-		elem.size_in_bytes = part->size_in_bytes;
-		elem.duration_ms = stopwatch.elapsed() / 10000000;
-
-		elem.database_name = part->storage.getDatabaseName();
-		elem.table_name = part->storage.getTableName();
-		elem.part_name = part->name;
-
-		part_log->add(elem);
-	}
-	part_log.reset();
+	elem.duration_ms = stopwatch.elapsed() / 10000000;
 
 	if (!to_detached)
 	{
@@ -2099,6 +2095,37 @@ bool StorageReplicatedMergeTree::fetchPart(const String & part_name, const Strin
 
 		MergeTreeData::Transaction transaction;
 		auto removed_parts = data.renameTempPartAndReplace(part, nullptr, &transaction);
+
+		std::shared_ptr<PartLog> part_log = context.getPartLog();
+		if (part_log)
+		{
+			PartLogElement elem;
+			elem.event_time = time(0);
+
+			elem.merged_from.reserve(parts.size());
+			for (const auto & part : removed_parts)
+				elem.merged_from.push_back(part->name);
+
+			elem.event_type = PartLogElement::DOWNLOAD_PART;
+			elem.size_in_bytes = part->size_in_bytes;
+		
+			elem.database_name = part->storage.getDatabaseName();
+			elem.table_name = part->storage.getTableName();
+			elem.part_name = part->name;
+
+			part_log->add(elem);
+
+			elem.duration_ms = 0;
+			elem.type = PartLogElement::REMOVE_PART;
+			elem.merged_from = Strings();
+			for (const auto & part : removed_parts)
+			{
+				elem.part_name = part->name;
+				elem.size_in_bytes = part->size_in_bytes;
+				part_log->add(elem);
+			}
+		}
+		part_log.reset();
 
 		getZooKeeper()->multi(ops);
 		transaction.commit();
@@ -2357,14 +2384,8 @@ bool StorageReplicatedMergeTree::optimize(const String & partition, bool final, 
 			MergeList::EntryPtr merge_entry = context.getMergeList().insert(database_name, table_name, merged_name, parts);
 
 			/// Logging
-			PartLogElement elem;
 			Stopwatch stopwatch;
-			elem.event_time = time(0);
-
-			elem.merged_from.reserve(parts.size());
-			for (const auto & part : parts)
-				elem.merged_from.push_back(part->name);
-
+			
 			auto new_part = unreplicated_merger->mergePartsToTemporaryPart(
 				parts, merged_name, *merge_entry, settings.min_bytes_to_use_direct_io, time(0));
 
@@ -2373,6 +2394,13 @@ bool StorageReplicatedMergeTree::optimize(const String & partition, bool final, 
 			std::shared_ptr<PartLog> part_log = context.getPartLog();
 			if (part_log)
 			{
+				PartLogElement elem;
+				elem.event_time = time(0);
+
+				elem.merged_from.reserve(parts.size());
+				for (const auto & part : parts)
+					elem.merged_from.push_back(part->name);
+
 				elem.event_type = PartLogElement::MERGE_PARTS;
 				elem.size_in_bytes = new_part->size_in_bytes;
 
@@ -2383,6 +2411,17 @@ bool StorageReplicatedMergeTree::optimize(const String & partition, bool final, 
 				elem.duration_ms = stopwatch.elapsed() / 1000000;
 
 				part_log->add(elem);
+
+				elem.duration_ms = 0;
+				elem.event_type = PartLogElement::REMOVE_PART;
+				elem.merged_from = Strings();
+
+				for (const auto & part : parts)
+				{
+					elem.part_name = part->name;
+					elem.size_in_bytes = part->size_in_bytes;
+					part_log->add(elem);
+				}
 			}
 			return true;
 		}
