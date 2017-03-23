@@ -369,8 +369,8 @@ bool StorageMergeTree::merge(
 		elem.merged_from = Strings();
 		for (const auto & part : merging_tagger->parts)
 		{
-			elem.name = part.part_name;
-			elem.size_in_bytes = part.size_in_bytes;
+			elem.name = part->part_name;
+			elem.size_in_bytes = part->size_in_bytes;
 			part_log->add(elem);
 		}
 	}
