@@ -371,7 +371,7 @@ bool StorageMergeTree::merge(
 		{
 			elem.name = part.part_name;
 			elem.size_in_bytes = part.size_in_bytes;
-			part_log->add(elem)
+			part_log->add(elem);
 		}
 	}
 

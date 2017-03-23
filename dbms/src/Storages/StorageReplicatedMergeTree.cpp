@@ -2080,8 +2080,6 @@ bool StorageReplicatedMergeTree::fetchPart(const String & part_name, const Strin
 	MergeTreeData::MutableDataPartPtr part = fetcher.fetchPart(
 		part_name, replica_path, address.host, address.replication_port, to_detached);
 
-	elem.duration_ms = stopwatch.elapsed() / 10000000;
-
 	if (!to_detached)
 	{
 		zkutil::Ops ops;
@@ -2102,10 +2100,11 @@ bool StorageReplicatedMergeTree::fetchPart(const String & part_name, const Strin
 			PartLogElement elem;
 			elem.event_time = time(0);
 
-			elem.merged_from.reserve(parts.size());
+			elem.merged_from.reserve(removed_parts.size());
 			for (const auto & part : removed_parts)
 				elem.merged_from.push_back(part->name);
 
+			elem.duration_ms = stopwatch.elapsed() / 10000000;
 			elem.event_type = PartLogElement::DOWNLOAD_PART;
 			elem.size_in_bytes = part->size_in_bytes;
 		
