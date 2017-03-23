@@ -2116,7 +2116,7 @@ bool StorageReplicatedMergeTree::fetchPart(const String & part_name, const Strin
 			part_log->add(elem);
 
 			elem.duration_ms = 0;
-			elem.type = PartLogElement::REMOVE_PART;
+			elem.event_type = PartLogElement::REMOVE_PART;
 			elem.merged_from = Strings();
 			for (const auto & part : removed_parts)
 			{
