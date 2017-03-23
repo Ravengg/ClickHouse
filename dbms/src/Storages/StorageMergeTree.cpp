@@ -366,7 +366,7 @@ bool StorageMergeTree::merge(
 
 		elem.duration_ms = 0;
 		elem.event_type = PartLogElement::REMOVE_PART;
-		elem.merged_from = Strings();
+		elem.merged_from.resize(0);
 		for (const auto & part : merging_tagger->parts)
 		{
 			elem.part_name = part->name;
