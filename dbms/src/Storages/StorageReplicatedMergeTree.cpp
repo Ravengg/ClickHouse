@@ -1232,7 +1232,7 @@ bool StorageReplicatedMergeTree::executeLogEntry(const LogEntry & entry)
 
 					elem.duration_ms = 0;
 					elem.event_type = PartLogElement::REMOVE_PART;
-					elem.merged_from = Strings();
+					elem.merged_from.resize(0);
 					for (const auto & part : parts)
 					{
 						elem.part_name = part->name;
@@ -2116,7 +2116,7 @@ bool StorageReplicatedMergeTree::fetchPart(const String & part_name, const Strin
 
 			elem.duration_ms = 0;
 			elem.event_type = PartLogElement::REMOVE_PART;
-			elem.merged_from = Strings();
+			elem.merged_from.resize(0);
 			for (const auto & part : removed_parts)
 			{
 				elem.part_name = part->name;
@@ -2413,7 +2413,7 @@ bool StorageReplicatedMergeTree::optimize(const String & partition, bool final, 
 
 				elem.duration_ms = 0;
 				elem.event_type = PartLogElement::REMOVE_PART;
-				elem.merged_from = Strings();
+				elem.merged_from.resize(0);
 
 				for (const auto & part : parts)
 				{
